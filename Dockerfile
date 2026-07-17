@@ -12,15 +12,12 @@ WORKDIR /tmp
 ARG GIT_APT_VERSION=1:2.47.3-0+deb13u1
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
-    openssh-server \
-    nginx \
     unzip \
     fcgiwrap \
     git=${GIT_APT_VERSION} \
     make \
     wget \
     gcc \
-    sudo \
     zip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -38,8 +35,6 @@ RUN ./install.sh helm && \
 FROM $BASE_IMAGE AS argocd-base
 
 LABEL org.opencontainers.image.source="https://github.com/argoproj/argo-cd"
-
-USER root
 
 ENV ARGOCD_USER_ID=999 \
     DEBIAN_FRONTEND=noninteractive
@@ -81,6 +76,7 @@ RUN touch ssh_known_hosts && \
 WORKDIR /app/config
 RUN mkdir -p tls && \
     mkdir -p gpg/source && \
+    chmod 0700 gpg/source && \
     mkdir -p gpg/keys && \
     chown argocd gpg/keys && \
     chmod 0700 gpg/keys
@@ -119,49 +115,4 @@ RUN NODE_ENV='production' NODE_ONLINE_ENV='online' NODE_OPTIONS=--max_old_space_
 ####################################################################################################
 # Argo CD Build stage which performs the actual build of Argo CD binaries
 ####################################################################################################
-FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26.5@sha256:63f132d58c1f589f0dcda584933a9bb44bfda1150f1506377f5a902f34d86033 AS argocd-build
-
-WORKDIR /go/src/github.com/argoproj/argo-cd
-
-COPY go.* ./
-RUN mkdir -p gitops-engine
-COPY gitops-engine/go.* ./gitops-engine
-RUN go mod download
-
-# Perform the build
-COPY . .
-COPY --from=argocd-ui /src/dist/app /go/src/github.com/argoproj/argo-cd/ui/dist/app
-ARG TARGETOS \
-    TARGETARCH
-# These build args are optional; if not specified the defaults will be taken from the Makefile
-ARG GIT_TAG \
-    BUILD_DATE \
-    GIT_TREE_STATE \
-    GIT_COMMIT
-RUN GIT_COMMIT=$GIT_COMMIT \
-    GIT_TREE_STATE=$GIT_TREE_STATE \
-    GIT_TAG=$GIT_TAG \
-    BUILD_DATE=$BUILD_DATE \
-    GOOS=$TARGETOS \
-    GOARCH=$TARGETARCH \
-    make argocd-all
-
-####################################################################################################
-# Final image
-####################################################################################################
-FROM argocd-base
-ENTRYPOINT ["/usr/bin/tini", "--"]
-COPY --from=argocd-build /go/src/github.com/argoproj/argo-cd/dist/argocd* /usr/local/bin/
-
-USER root
-RUN ln -s /usr/local/bin/argocd /usr/local/bin/argocd-server && \
-    ln -s /usr/local/bin/argocd /usr/local/bin/argocd-repo-server && \
-    ln -s /usr/local/bin/argocd /usr/local/bin/argocd-cmp-server && \
-    ln -s /usr/local/bin/argocd /usr/local/bin/argocd-application-controller && \
-    ln -s /usr/local/bin/argocd /usr/local/bin/argocd-dex && \
-    ln -s /usr/local/bin/argocd /usr/local/bin/argocd-notifications && \
-    ln -s /usr/local/bin/argocd /usr/local/bin/argocd-applicationset-controller && \
-    ln -s /usr/local/bin/argocd /usr/local/bin/argocd-k8s-auth && \
-    ln -s /usr/local/bin/argocd /usr/local/bin/argocd-commit-server
-
-USER $ARGOCD_USER_ID
+FROM --platfo
