@@ -1,15 +1,37 @@
 ####################################################################################################
 # argocd-dev
 ####################################################################################################
-FROM argocd-base
-COPY argocd /usr/local/bin/
+# Use specific image tag/digest for reproducible builds
+ARG BASE_IMAGE_TAG=latest
+FROM argocd-base:${BASE_IMAGE_TAG}
 
+# Add labels for better traceability
+LABEL maintainer="security-team" \
+      description="ArgoCD Development Image" \
+      version="dev"
+
+# Copy binary with proper ownership to avoid needing root
+# The base image should have argocd user (999) already created
+COPY --chown=999:999 argocd /usr/local/bin/
+
+# Switch to root only for creating symlinks, minimize root operations
 USER root
-RUN ln -s /usr/local/bin/argocd /usr/local/bin/argocd-server && \
+RUN set -eux; \
+    # Verify the binary exists and is executable
+    test -x /usr/local/bin/argocd; \
+    # Create symlinks
+    ln -s /usr/local/bin/argocd /usr/local/bin/argocd-server && \
     ln -s /usr/local/bin/argocd /usr/local/bin/argocd-repo-server && \
     ln -s /usr/local/bin/argocd /usr/local/bin/argocd-application-controller && \
     ln -s /usr/local/bin/argocd /usr/local/bin/argocd-dex && \
     ln -s /usr/local/bin/argocd /usr/local/bin/argocd-notifications && \
-    ln -s /usr/local/bin/argocd /usr/local/bin/argocd-applicationset-controller
+    ln -s /usr/local/bin/argocd /usr/local/bin/argocd-applicationset-controller && \
+    # Ensure proper permissions
+    chmod 755 /usr/local/bin/argocd
 
+# Drop privileges - run as non-root user
 USER 999
+
+# Ensure no new privileges can be gained
+# Note: This is enforced at runtime, documented here for clarity
+# Use: docker run --security-opt=no-new-privileges:true
